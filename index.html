@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Student Home Map</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <style>
+    :root{
+      --bgA:#7c3aed;
+      --bgB:#06b6d4;
+      --card: rgba(255,255,255,.92);
+      --ink:#0b1220;
+      --muted: rgba(11,18,32,.65);
+      --shadow: 0 18px 45px rgba(0,0,0,.22);
+      --stroke: rgba(255,255,255,.25);
+      --radius: 18px;
+    }
+
+    html,body{height:100%;margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    #map{height:100%;width:100%}
+
+    .glow{
+      position:fixed; inset:0; z-index:0; pointer-events:none;
+      background:
+        radial-gradient(900px 520px at 12% 10%, rgba(124,58,237,.16), transparent 55%),
+        radial-gradient(900px 520px at 90% 16%, rgba(6,182,212,.18), transparent 55%),
+        radial-gradient(900px 650px at 50% 98%, rgba(249,115,22,.10), transparent 55%);
+    }
+
+    .topBar{
+      position:fixed; top:12px; left:12px; right:12px; z-index:9999;
+      display:flex; justify-content:space-between; align-items:center; gap:12px;
+      pointer-events:none;
+    }
+    .brand{
+      pointer-events:auto;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      border-radius:999px;
+      color:#fff;
+      background: linear-gradient(135deg, rgba(124,58,237,.92), rgba(6,182,212,.82));
+      box-shadow: var(--shadow);
+      border:1px solid var(--stroke);
+      backdrop-filter: blur(10px);
+      max-width: 72vw;
+    }
+    .brand .t{font-weight:950; letter-spacing:.2px}
+    .brand .s{font-size:12px; opacity:.92; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+
+    .chip{
+      pointer-events:auto;
+      display:flex; align-items:center; gap:10px;
+      padding:8px 10px;
+      border-radius:999px;
+      background: rgba(17,24,39,.68);
+      border:1px solid rgba(255,255,255,.18);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+
+    .iconBtn{
+      width:40px; height:40px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.10);
+      color:#fff;
+      display:grid; place-items:center;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select:none;
+    }
+    .iconBtn:hover{ background: rgba(255,255,255,.14); }
+
+    .tooltipText{
+      display:none;
+      color:#fff; font-weight:900; font-size:12px; letter-spacing:.2px;
+      margin-right: 2px;
+      opacity:.95;
+    }
+    @media (min-width: 520px){
+      .tooltipText{ display:block; }
+    }
+
+    .toast{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:14px; z-index:9999;
+      padding:10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.94);
+      border:1px solid rgba(0,0,0,.08);
+      box-shadow: var(--shadow);
+      font-weight:900;
+      display:none;
+      max-width: calc(100vw - 28px);
+    }
+
+    dialog{
+      border:0; padding:0;
+      width: min(560px, calc(100vw - 24px));
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      background: rgba(255,255,255,.96);
+      overflow:hidden;
+    }
+    dialog::backdrop{ background: rgba(0,0,0,.35); backdrop-filter: blur(3px); }
+
+    .dlgHead{
+      padding: 14px 16px;
+      background: linear-gradient(135deg, rgba(124,58,237,.98), rgba(6,182,212,.92));
+      color:#fff;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .dlgHead .title{ font-weight: 950; }
+    .xbtn{
+      width:38px;height:38px;border-radius:14px;
+      border:1px solid rgba(255,255,255,.22);
+      background: rgba(255,255,255,.16);
+      color:#fff;
+      cursor:pointer;
+    }
+    .dlgBody{ padding: 14px 16px 6px; color: var(--ink); }
+    .hint{ font-size: 12px; opacity:.72; line-height:1.35; margin-top:6px; }
+    .grid{ display:grid; gap:10px; margin-top: 12px; }
+    .row{ display:flex; gap:10px; }
+    .row > * { flex:1; }
+    input{
+      width:100%;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,.10);
+      background: rgba(255,255,255,.97);
+      padding: 12px 12px;
+      font-size: 15px;
+      outline:none;
+    }
+
+    .photoRow{
+      display:flex; gap:12px; align-items:center;
+      padding:10px;
+      border-radius: 18px;
+      border:1px dashed rgba(0,0,0,.16);
+      background: rgba(124,58,237,.05);
+    }
+    .avatar{
+      width:62px; height:62px;
+      border-radius:18px;
+      overflow:hidden;
+      background: rgba(0,0,0,.05);
+      display:grid; place-items:center;
+      border:1px solid rgba(0,0,0,.08);
+      flex:0 0 auto;
+    }
+    .avatar img{ width:100%; height:100%; object-fit:cover; }
+
+    .actions{
+      padding: 12px 16px 16px;
+      display:flex; gap:10px; justify-content:flex-end;
+    }
+    .btn{
+      border:0;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-weight: 950;
+      cursor:pointer;
+    }
+    .btnGhost{ background: rgba(17,24,39,.08); color:#111827; }
+    .btnOk{ background: linear-gradient(135deg, rgba(16,185,129,.98), rgba(6,182,212,.88)); color:#fff; }
+    .btnDanger{ background: linear-gradient(135deg, rgba(239,68,68,.98), rgba(249,115,22,.88)); color:#fff; }
+
+    /* No home cursor now. Just a subtle crosshair in add mode */
+    .add-mode{ cursor: crosshair; }
+
+    .leaflet-popup-content-wrapper{ border-radius: 18px; }
+    .leaflet-popup-content{ margin: 12px 14px; }
+  </style>
+</head>
+
+<body>
+  <div class="glow"></div>
+
+  <div class="topBar">
+    <div class="brand">
+      <i class="fa-solid fa-house-chimney"></i>
+      <div style="display:flex;flex-direction:column;line-height:1.1">
+        <div class="t">Student Home Map</div>
+        <div class="s" id="statusText">Loading…</div>
+      </div>
+    </div>
+
+    <div class="chip" aria-label="controls">
+      <span class="tooltipText" id="modeText">Ready</span>
+
+      <button class="iconBtn" id="addBtn" title="Add Home">
+        <i class="fa-solid fa-location-dot"></i>
+      </button>
+
+      <button class="iconBtn" id="adminBtn" title="Admin">
+        <i class="fa-solid fa-user-shield"></i>
+      </button>
+
+      <button class="iconBtn" id="baseBtn" title="Basemap">
+        <i class="fa-solid fa-layer-group"></i>
+      </button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+  <div class="toast" id="toast"></div>
+
+  <!-- Add/Edit dialog -->
+  <dialog id="homeDlg">
+    <div class="dlgHead">
+      <div class="title" id="homeTitle">Add Home</div>
+      <button class="xbtn" id="homeClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="dlgBody">
+      <div class="hint" id="homeHint">Tap map to place location, then fill details and save.</div>
+
+      <div class="grid">
+        <input id="nameIn" placeholder="Student name" maxlength="60" />
+        <div class="row">
+          <input id="studIn" placeholder="Student contact" inputmode="tel" maxlength="30" />
+          <input id="parIn" placeholder="Parent contact" inputmode="tel" maxlength="30" />
+        </div>
+
+        <div class="photoRow">
+          <div class="avatar" id="avatarBox"><i class="fa-solid fa-camera" style="opacity:.6"></i></div>
+          <div style="flex:1">
+            <input id="photoIn" type="file" accept="image/*" capture="user" />
+            <div class="hint">Selfie or gallery (optional). Image auto-compressed for speed.</div>
+            <div class="hint" id="coordText"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btnGhost" id="homeCancel">Cancel</button>
+      <button class="btn btnOk" id="homeSave">Save</button>
+    </div>
+  </dialog>
+
+  <!-- Admin dialog -->
+  <dialog id="adminDlg">
+    <div class="dlgHead">
+      <div class="title">Admin Login</div>
+      <button class="xbtn" id="adminClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="dlgBody">
+      <div class="hint">Login to enable Edit/Delete (admin can also add).</div>
+      <div class="grid">
+        <input id="emailIn" placeholder="Email" autocomplete="username" />
+        <input id="passIn" placeholder="Password" type="password" autocomplete="current-password" />
+        <div class="hint" id="adminState"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btnGhost" id="logoutBtn">Logout</button>
+      <button class="btn btnOk" id="loginBtn">Login</button>
+    </div>
+  </dialog>
+
+  <!-- Basemap dialog -->
+  <dialog id="baseDlg">
+    <div class="dlgHead">
+      <div class="title">Basemap</div>
+      <button class="xbtn" id="baseClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="dlgBody">
+      <div class="grid">
+        <button class="btn btnOk" id="osmBtn"><i class="fa-solid fa-map" style="margin-right:8px"></i> OSM</button>
+        <button class="btn btnGhost" id="hybBtn"><i class="fa-solid fa-earth-asia" style="margin-right:8px"></i> Hybrid</button>
+      </div>
+      <div class="hint">Hybrid = satellite + labels.</div>
+    </div>
+  </dialog>
+
+  <script>
+    /**********************
+     * SUPABASE CONFIG
+     **********************/
+    const SUPABASE_URL = "https://xiivucewxkfamwjnhkzi.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_fMDfvvh5qzR6MT2y99nlvg_5JsQnLsb";
+    const PHOTOS_BUCKET = "student-photos";
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    /**********************
+     * UI HELPERS
+     **********************/
+    const statusText = document.getElementById("statusText");
+    const toast = document.getElementById("toast");
+    const modeText = document.getElementById("modeText");
+
+    function setStatus(s){ statusText.textContent = s; }
+    function showToast(msg){
+      toast.textContent = msg;
+      toast.style.display = "block";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=> toast.style.display="none", 2200);
+    }
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[c]));
+    }
+    async function isAdmin(){
+      const { data } = await sb.auth.getSession();
+      return !!data.session;
+    }
+
+    /**********************
+     * MAP + BASEMAPS
+     **********************/
+    const map = L.map("map").setView([7.0, 80.0], 8);
+
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OSM"
+    });
+
+    const esriImagery = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "&copy; Esri" }
+    );
+    const esriLabels = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "" }
+    );
+    const hybrid = L.layerGroup([esriImagery, esriLabels]);
+
+    osm.addTo(map);
+
+    function setBasemap(layer){
+      // remove only basemap layers
+      [osm, hybrid].forEach(l => { if (map.hasLayer(l)) map.removeLayer(l); });
+      layer.addTo(map);
+
+      // re-add markers (Leaflet keeps them, but safe)
+      for (const it of markers.values()) it.marker.addTo(map);
+    }
+
+    /**********************
+     * ICON
+     **********************/
+    const homeIcon = L.divIcon({
+      className: "",
+      html: `
+        <div style="
+          width:42px;height:42px;border-radius:16px;
+          background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(6,182,212,.88));
+          box-shadow: 0 14px 36px rgba(0,0,0,.26);
+          display:grid;place-items:center;
+          border: 2px solid rgba(255,255,255,.85);
+        ">
+          <i class="fa-solid fa-house" style="color:white;font-size:17px"></i>
+        </div>`,
+      iconSize:[42,42],
+      iconAnchor:[21,38],
+      popupAnchor:[0,-38]
+    });
+
+    /**********************
+     * STATE
+     **********************/
+    let addMode = false;
+    let pendingLatLng = null;
+    let pendingPhotoFile = null;
+
+    // edit state (admin)
+    let editingId = null;
+    let existingPhotoUrl = null;
+
+    /**********************
+     * MARKERS
+     **********************/
+    const markers = new Map(); // id -> { marker, row }
+
+    async function popupHtml(row){
+      const admin = await isAdmin();
+      const photo = row.photo_url
+        ? `<img src="${row.photo_url}" style="width:100%;max-width:240px;border-radius:16px;margin-top:10px;display:block;">`
+        : "";
+
+      const adminBtns = admin ? `
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button onclick="window.__edit('${row.id}')" style="flex:1;border:0;border-radius:14px;padding:10px 12px;font-weight:950;background:rgba(124,58,237,.12);cursor:pointer;">
+            <i class="fa-solid fa-pen-to-square"></i> Edit
+          </button>
+          <button onclick="window.__del('${row.id}')" style="flex:1;border:0;border-radius:14px;padding:10px 12px;font-weight:950;background:rgba(239,68,68,.12);cursor:pointer;">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        </div>` : "";
+
+      return `
+        <div style="min-width:220px">
+          <div style="font-weight:950;font-size:14px;">${escapeHtml(row.student_name)}</div>
+          <div style="margin-top:8px;font-size:13px;line-height:1.55">
+            <div><b>Student:</b> ${escapeHtml(row.student_contact)}</div>
+            <div><b>Parent:</b> ${escapeHtml(row.parent_contact)}</div>
+          </div>
+          ${photo}
+          ${adminBtns}
+        </div>`;
+    }
+
+    async function addMarker(row){
+      if (markers.has(row.id)) return;
+
+      const marker = L.marker([row.lat, row.lng], { icon: homeIcon }).addTo(map);
+
+      marker.bindTooltip(row.student_name, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -36],
+        opacity: 0.95
+      });
+
+      marker.bindPopup(await popupHtml(row));
+      marker.on("popupopen", async () => marker.setPopupContent(await popupHtml(row)));
+
+      markers.set(row.id, { marker, row });
+    }
+
+    async function updateMarker(row){
+      const it = markers.get(row.id);
+      if (!it){ await addMarker(row); return; }
+
+      it.row = row;
+      it.marker.setLatLng([row.lat, row.lng]);
+      it.marker.unbindTooltip();
+      it.marker.bindTooltip(row.student_name, { permanent:true, direction:"top", offset:[0,-36], opacity:.95 });
+      it.marker.setPopupContent(await popupHtml(row));
+    }
+
+    function removeMarkerLocal(id){
+      const it = markers.get(id);
+      if (!it) return;
+      map.removeLayer(it.marker);
+      markers.delete(id);
+    }
+
+    /**********************
+     * LOAD + REALTIME
+     **********************/
+    async function loadAll(){
+      setStatus("Loading points…");
+      for (const it of markers.values()) map.removeLayer(it.marker);
+      markers.clear();
+
+      const { data, error } = await sb.from("student_homes").select("*").order("created_at", { ascending:true });
+      if (error){ console.error(error); setStatus("Load error (check policies)"); return; }
+
+      for (const row of data) await addMarker(row);
+      setStatus(`Loaded ${data.length} home(s).`);
+    }
+
+    sb.channel("homes-rt")
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"student_homes" }, async (p)=> { await addMarker(p.new); setStatus(`New home added. Total: ${markers.size}`); })
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"student_homes" }, async (p)=> { await updateMarker(p.new); setStatus(`Home updated. Total: ${markers.size}`); })
+      .on("postgres_changes", { event:"DELETE", schema:"public", table:"student_homes" }, (p)=> {
+        if (p.old?.id) removeMarkerLocal(p.old.id);
+        setStatus(`Home deleted. Total: ${markers.size}`);
+      })
+      .subscribe();
+
+    /**********************
+     * DIALOGS
+     **********************/
+    const homeDlg = document.getElementById("homeDlg");
+    const homeTitle = document.getElementById("homeTitle");
+    const homeClose = document.getElementById("homeClose");
+    const homeCancel = document.getElementById("homeCancel");
+    const homeSave = document.getElementById("homeSave");
+    const nameIn = document.getElementById("nameIn");
+    const studIn = document.getElementById("studIn");
+    const parIn = document.getElementById("parIn");
+    const photoIn = document.getElementById("photoIn");
+    const avatarBox = document.getElementById("avatarBox");
+    const coordText = document.getElementById("coordText");
+
+    const adminDlg = document.getElementById("adminDlg");
+    const adminClose = document.getElementById("adminClose");
+    const emailIn = document.getElementById("emailIn");
+    const passIn = document.getElementById("passIn");
+    const adminState = document.getElementById("adminState");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    const baseDlg = document.getElementById("baseDlg");
+    const baseClose = document.getElementById("baseClose");
+    const osmBtn = document.getElementById("osmBtn");
+    const hybBtn = document.getElementById("hybBtn");
+
+    function resetForm(){
+      nameIn.value = "";
+      studIn.value = "";
+      parIn.value = "";
+      photoIn.value = "";
+      pendingPhotoFile = null;
+      avatarBox.innerHTML = `<i class="fa-solid fa-camera" style="opacity:.6"></i>`;
+      existingPhotoUrl = null;
+    }
+
+    homeClose.addEventListener("click", ()=> homeDlg.close());
+    homeCancel.addEventListener("click", ()=> homeDlg.close());
+
+    photoIn.addEventListener("change", ()=>{
+      const f = photoIn.files?.[0];
+      if (!f) return;
+      pendingPhotoFile = f;
+      const url = URL.createObjectURL(f);
+      avatarBox.innerHTML = `<img src="${url}" alt="preview">`;
+    });
+
+    /**********************
+     * BUTTONS
+     **********************/
+    document.getElementById("addBtn").addEventListener("click", ()=>{
+      addMode = !addMode;
+      editingId = null;
+      if (addMode){
+        modeText.textContent = "Add mode";
+        document.body.classList.add("add-mode");
+        showToast("Tap map to place home");
+        setStatus("Add mode: tap map to place home.");
+      } else {
+        modeText.textContent = "Ready";
+        document.body.classList.remove("add-mode");
+        pendingLatLng = null;
+        setStatus(`Ready. Total: ${markers.size}`);
+      }
+    });
+
+    document.getElementById("adminBtn").addEventListener("click", async ()=>{
+      adminDlg.showModal();
+      adminState.textContent = (await isAdmin()) ? "✅ Logged in (Edit/Delete enabled)" : "Not logged in.";
+    });
+
+    document.getElementById("baseBtn").addEventListener("click", ()=> baseDlg.showModal());
+
+    adminClose.addEventListener("click", ()=> adminDlg.close());
+    baseClose.addEventListener("click", ()=> baseDlg.close());
+    osmBtn.addEventListener("click", ()=> { setBasemap(osm); baseDlg.close(); showToast("Basemap: OSM"); });
+    hybBtn.addEventListener("click", ()=> { setBasemap(hybrid); baseDlg.close(); showToast("Basemap: Hybrid"); });
+
+    loginBtn.addEventListener("click", async ()=>{
+      adminState.textContent = "Logging in…";
+      const { error } = await sb.auth.signInWithPassword({ email: emailIn.value.trim(), password: passIn.value });
+      if (error){ console.error(error); adminState.textContent="Login failed."; alert(error.message); return; }
+      showToast("Admin logged in");
+      adminDlg.close(); // auto close
+    });
+
+    logoutBtn.addEventListener("click", async ()=>{
+      await sb.auth.signOut();
+      showToast("Admin logged out");
+      adminState.textContent = "Logged out.";
+    });
+
+    /**********************
+     * ADD / EDIT FLOW
+     **********************/
+    map.on("click", (e)=>{
+      if (!addMode && !editingId) return;
+
+      // If admin is editing, clicking map moves point
+      if (editingId){
+        pendingLatLng = e.latlng;
+        coordText.textContent = `Updated: ${pendingLatLng.lat.toFixed(6)}, ${pendingLatLng.lng.toFixed(6)}`;
+        showToast("Location moved");
+        return;
+      }
+
+      // Add mode
+      pendingLatLng = e.latlng;
+      resetForm();
+      homeTitle.textContent = "Add Home";
+      coordText.textContent = `Selected: ${pendingLatLng.lat.toFixed(6)}, ${pendingLatLng.lng.toFixed(6)}`;
+      homeDlg.showModal();
+    });
+
+    /**********************
+     * IMAGE COMPRESSION (fast for 100 students)
+     **********************/
+    async function compressImage(file, maxW=900, quality=0.75){
+      const img = document.createElement("img");
+      const url = URL.createObjectURL(file);
+      img.src = url;
+      await img.decode();
+      URL.revokeObjectURL(url);
+
+      const ratio = img.width / img.height;
+      const w = Math.min(img.width, maxW);
+      const h = Math.round(w / ratio);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+      return new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", quality));
+    }
+
+    async function uploadPhotoSafe(){
+      if (!pendingPhotoFile) return existingPhotoUrl || null;
+
+      try{
+        const blob = await compressImage(pendingPhotoFile, 900, 0.75);
+        const filename = `home_${Date.now()}_${Math.random().toString(16).slice(2)}.jpg`;
+
+        const { error } = await sb.storage
+          .from(PHOTOS_BUCKET)
+          .upload(filename, blob, { upsert:false, contentType:"image/jpeg" });
+
+        if (error) throw error;
+
+        const { data } = sb.storage.from(PHOTOS_BUCKET).getPublicUrl(filename);
+        return data.publicUrl;
+      } catch (err){
+        console.error("Photo upload failed:", err);
+        showToast("Photo upload failed (saved without photo)");
+        return null;
+      }
+    }
+
+    homeSave.addEventListener("click", async ()=>{
+      const student_name = nameIn.value.trim();
+      const student_contact = studIn.value.trim();
+      const parent_contact = parIn.value.trim();
+
+      if (!student_name || !student_contact || !parent_contact){
+        alert("Please fill name + student contact + parent contact.");
+        return;
+      }
+      if (!pendingLatLng){
+        alert("Please tap the map to choose a location.");
+        return;
+      }
+
+      setStatus(editingId ? "Updating…" : "Saving…");
+
+      const photo_url = await uploadPhotoSafe();
+
+      if (!editingId){
+        // INSERT (works for anon + authenticated now, after policy fix)
+        const { data, error } = await sb.from("student_homes")
+          .insert([{
+            student_name, student_contact, parent_contact, photo_url,
+            lat: pendingLatLng.lat, lng: pendingLatLng.lng
+          }])
+          .select().single();
+
+        if (error){
+          console.error("Insert error:", error);
+          alert(`Save failed: ${error.message}`);
+          setStatus("Save failed.");
+          return;
+        }
+
+        await addMarker(data);
+        homeDlg.close();
+
+        addMode = false;
+        modeText.textContent = "Ready";
+        document.body.classList.remove("add-mode");
+
+        showToast("Saved!");
+        setStatus(`Saved. Total: ${markers.size}`);
+      } else {
+        // UPDATE (admin only)
+        if (!(await isAdmin())){
+          alert("Admin login required to edit.");
+          return;
+        }
+
+        const { data, error } = await sb.from("student_homes")
+          .update({
+            student_name, student_contact, parent_contact, photo_url,
+            lat: pendingLatLng.lat, lng: pendingLatLng.lng
+          })
+          .eq("id", editingId)
+          .select().single();
+
+        if (error){
+          console.error("Update error:", error);
+          alert(`Update failed: ${error.message}`);
+          setStatus("Update failed.");
+          return;
+        }
+
+        await updateMarker(data);
+        editingId = null;
+        homeDlg.close();
+
+        showToast("Updated!");
+        setStatus(`Updated. Total: ${markers.size}`);
+      }
+    });
+
+    /**********************
+     * ADMIN: EDIT / DELETE (DB + map)
+     **********************/
+    window.__edit = async (id)=>{
+      if (!(await isAdmin())){ showToast("Admin only"); return; }
+      const it = markers.get(id);
+      if (!it) return;
+
+      editingId = id;
+      pendingLatLng = { lat: it.row.lat, lng: it.row.lng };
+      existingPhotoUrl = it.row.photo_url || null;
+      pendingPhotoFile = null;
+
+      homeTitle.textContent = "Edit Home";
+      nameIn.value = it.row.student_name || "";
+      studIn.value = it.row.student_contact || "";
+      parIn.value = it.row.parent_contact || "";
+      coordText.textContent = `Tap map to move. Current: ${pendingLatLng.lat.toFixed(6)}, ${pendingLatLng.lng.toFixed(6)}`;
+
+      if (existingPhotoUrl){
+        avatarBox.innerHTML = `<img src="${existingPhotoUrl}" alt="photo">`;
+      } else {
+        avatarBox.innerHTML = `<i class="fa-solid fa-camera" style="opacity:.6"></i>`;
+      }
+
+      homeDlg.showModal();
+      showToast("Tap map to move location");
+    };
+
+    window.__del = async (id)=>{
+      if (!(await isAdmin())){ showToast("Admin only"); return; }
+      if (!confirm("Delete this location?")) return;
+
+      // IMPORTANT: delete from DB first
+      const { error } = await sb.from("student_homes").delete().eq("id", id);
+      if (error){
+        console.error("Delete error:", error);
+        alert(`Delete failed: ${error.message}`);
+        return;
+      }
+
+      // Realtime will remove it, but we also remove immediately for UI
+      removeMarkerLocal(id);
+      showToast("Deleted");
+      setStatus(`Deleted. Total: ${markers.size}`);
+    };
+
+    /**********************
+     * INIT
+     **********************/
+    loadAll();
+  </script>
+</body>
+</html>
